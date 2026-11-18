@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinysegment"
+version = "0.1.0"
+description = "Editable, independent CLIP, YOLO-World and EfficientViT-SAM inference"
+requires-python = ">=3.12"
+dependencies = ["torch", "torchvision", "numpy", "pillow", "opencv-python", "pyyaml", "requests", "matplotlib", "psutil", "polars", "ultralytics-thop", "ftfy", "regex", "tqdm"]
+
+[project.scripts]
+tinysegment = "tinysegment.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src", "vendor"]
+include = ["tinysegment*", "efficientvit*", "ultralytics*", "clip*", "segment_anything*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+tinysegment = ["weights.json"]
+clip = ["*.gz", "LICENSE"]
+efficientvit = ["LICENSE"]
+segment_anything = ["LICENSE"]
+ultralytics = ["cfg/**/*.yaml", "cfg/*.yaml", "assets/*", "LICENSE"]

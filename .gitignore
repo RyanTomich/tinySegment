@@ -221,3 +221,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local model checkpoints and inference artifacts
+/weights/
+/outputs/
+/.runtime/
+/build/
+/dist/
+*.egg-info/
+/runs/

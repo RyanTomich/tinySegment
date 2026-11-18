@@ -1,0 +1,3 @@
+include requirements.lock
+recursive-include vendor *.json *.md LICENSE* *.gz *.yaml *.jpg *.png
+recursive-include docs *.md
