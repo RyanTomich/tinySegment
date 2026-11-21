@@ -100,6 +100,8 @@ Quantization, model export, training, and a full performance benchmark harness a
 
 ## SAM experiments and checkpoint protection
 
+The [standard research SAM](research/sam/README.md#standard-research-sam) runs the stage 3 and stage 4 entry blocks with XNNPACK INT8. Use `research.sam.model.load_research_segmenter()` to load it and `tinysegment.load_segmenter()` for original FP32 SAM.
+
 Research code is separate from inference in [`research/sam/`](research/sam/README.md). Start with:
 
 ```sh
