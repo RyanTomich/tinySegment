@@ -3,10 +3,7 @@ import argparse
 from contextlib import ExitStack
 from functools import partial
 import json
-import os
 from pathlib import Path
-import tempfile
-from urllib.request import urlretrieve
 
 import numpy as np
 from PIL import Image
@@ -16,6 +13,7 @@ from torch.ao import nn as ao_nn
 from torch.ao.quantization.observer import MinMaxObserver
 
 from tinysegment import load_segmenter
+from tinysegment.experimental_models.efficientvit_sam.int8_stage3_stage4.build import calibration_paths as image_paths
 from tinysegment.models import Segmenter
 from tinysegment.weights import sha256, verify_baseline
 from .benchmark import SAMPLES, WARMUP, latency, paired_samples
@@ -46,20 +44,7 @@ def calibration_paths(root):
     ids = sorted({ann['image_id'] for ann in annotations['annotations'] if eligible(ann)} - evaluation_ids)[:16]
     if len(ids) != 16:
         raise ValueError('Expected 16 eligible held-out calibration images')
-    paths = []
-    for image_id in ids:
-        path = root / 'val2017' / f'{image_id:012}.jpg'
-        if not path.exists():
-            with tempfile.NamedTemporaryFile(dir=path.parent) as temp:
-                urlretrieve(f'https://s3.amazonaws.com/images.cocodataset.org/val2017/{path.name}', temp.name)
-                with Image.open(temp.name) as image:
-                    image.verify()
-                try:
-                    os.link(temp.name, path)
-                except FileExistsError:
-                    pass  # Another run published the image first.
-        paths.append(path)
-    return paths
+    return image_paths(root, ids)
 
 
 def observe(observer, tensor):

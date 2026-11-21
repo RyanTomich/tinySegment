@@ -1,7 +1,6 @@
 """Export and time backbone entry blocks on CPU. Stage 4 also tests its winner end to end."""
 import argparse
 from contextlib import ExitStack
-from copy import deepcopy
 from functools import partial
 from importlib.metadata import version
 from pathlib import Path
@@ -14,7 +13,9 @@ from time import perf_counter_ns
 import numpy as np
 from PIL import Image
 import torch
-from torch import nn
+from tinysegment.experimental_models.efficientvit_sam.int8_stage3_stage4.build import (
+    capture, entry, folded_block, operations,
+)
 
 from tinysegment import load_detector, load_segmenter, load_text_encoder
 from tinysegment.pipeline import read_image
@@ -24,21 +25,6 @@ from .evaluate import DEFAULT_IMAGE
 from .int8_neck import calibration_paths
 from .quality import mask_iou
 from .model import RuntimeBlock
-
-
-def entry(stage, stage_index=4):
-    return stage.model.image_encoder.backbone.stages[stage_index].op_list[0]
-
-
-def capture(stage, rgb, stage_index=4):
-    captured = []
-    def save(module, args, output):
-        captured.append((args[0].detach(), output.detach()))
-
-    with entry(stage, stage_index).register_forward_hook(save):
-        stage.predictor.set_image(np.asarray(rgb))
-    (pair,) = captured
-    return pair
 
 
 def samples(calls, rounds):
@@ -64,13 +50,6 @@ def saving(control, candidate):
             'ci95_ms': np.percentile(estimates, [2.5, 97.5]).tolist()}
 
 
-def operations(block):
-    layers = block.main
-    return {'expansion': layers.inverted_conv.conv, 'gelu_1': layers.inverted_conv.act,
-            'depthwise': layers.depth_conv.conv, 'gelu_2': layers.depth_conv.act,
-            'projection': layers.point_conv.conv, 'batch_norm': layers.point_conv.norm}
-
-
 def profile_original(block, x):
     timings = {}
     starts = {}
@@ -92,12 +71,6 @@ def profile_original(block, x):
             block(x)
     kernels = {name: partial(ops[name], value) for name, value in prepared.items()}
     return timings, samples(kernels, 5)
-
-
-def folded_block(block):
-    ops = deepcopy(operations(block))
-    ops['projection'] = nn.utils.fuse_conv_bn_eval(ops['projection'], ops.pop('batch_norm'))
-    return nn.Sequential(*ops.values()).eval()
 
 
 def errors(output, reference):

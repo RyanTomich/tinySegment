@@ -12,7 +12,7 @@ from unittest.mock import patch
 import numpy as np
 import torch
 
-from tinysegment import pipeline
+from tinysegment import pipeline, load_text_encoder, load_detector, load_segmenter
 from tinysegment.weights import MANIFEST, sha256 as file_sha256
 from .checkpoints import allocate_run
 from .evaluate import DEFAULT_IMAGE
@@ -107,8 +107,8 @@ def benchmark(coco_root=None, *, original_only=False):
     if original_only and coco_root is not None:
         raise ValueError('COCO comparison requires both original and research SAM')
     torch.set_num_threads(1)
-    text, detector = pipeline.load_text_encoder(), pipeline.load_detector()
-    models = {'original': pipeline.load_segmenter()}
+    text, detector = load_text_encoder(), load_detector()
+    models = {'original': load_segmenter()}
     if not original_only:
         from .model import load_research_segmenter
         from .stage4 import configure_threads

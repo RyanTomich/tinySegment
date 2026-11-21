@@ -19,6 +19,7 @@ namespaces = false
 
 [tool.setuptools.package-data]
 tinysegment = ["weights.json"]
+"tinysegment.experimental_models.efficientvit_sam.int8_stage3_stage4" = ["README.md"]
 clip = ["*.gz", "LICENSE"]
 efficientvit = ["LICENSE"]
 segment_anything = ["LICENSE"]

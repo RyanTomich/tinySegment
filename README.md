@@ -36,7 +36,23 @@ The bundled Ultralytics bus image is a convenient smoke-test input:
 
 Use `--help` on any command. CPU FP32 is the default; `--device mps` or `--device cuda:0` opts into another available backend. Only CPU has been validated. Detection defaults to image size 640, confidence 0.25, and NMS IoU 0.7. Image size must be a multiple of 32.
 
-`run` accepts one text prompt, matching the original demo. `encode-text` accepts multiple ordered prompts. SAM receives the original EXIF-corrected RGB image; green markers are drawn only on the output. `--legacy-marked-input` reproduces the old marker-before-segmentation behavior. No detections produces the unmarked RGBA image.
+For live Mac camera inference, run:
+
+```sh
+.venv/bin/tinysegment video person
+```
+
+Allow camera access if macOS prompts you. Type a new prompt in the terminal and press Return to change the target. The window displays the latest camera frame at capture resolution with the most recently completed opaque blue mask. A separate inference worker samples the newest frame and prompt whenever it is ready. During inference, playback continues with the previous mask, which can trail moving objects. The optional initial prompt can be omitted to preview the camera until you enter one. Press `q` or Escape in the window to quit. Use `--camera INDEX` to select another local camera (default `0`).
+
+For continuous inference on a fixed image, start a resident worker:
+
+```sh
+.venv/bin/tinysegment run vendor/ultralytics/assets/bus.jpg --stream --output outputs/mask.png
+```
+
+Enter one prompt per line on standard input. The worker loads CLIP, YOLO-World, and SAM before reading prompts. Each completed prompt replaces the output PNG with its combined binary mask. While inference is busy, newer prompts replace the pending prompt. Blank lines are ignored. Closing stdin drains the last pending prompt and exits.
+
+One-shot `run` accepts one text prompt, matching the original demo. `encode-text` accepts multiple ordered prompts. SAM receives the original EXIF-corrected RGB image; green markers are drawn only on the output. `--legacy-marked-input` reproduces the old marker-before-segmentation behavior. No detections produces the unmarked RGBA image.
 
 Artifacts:
 
@@ -75,7 +91,9 @@ Source locations:
 
 | Component | Editable implementation |
 |---|---|
-| TinySegment adapters and CLI | `src/tinysegment/` |
+| Off-the-shelf stage adapters and loaders | `src/tinysegment/baseline_models/{clip,yolo_world,efficientvit_sam}/` |
+| Experimental SAM loader and build recipe | `src/tinysegment/experimental_models/efficientvit_sam/int8_stage3_stage4/` |
+| Stage selection, resident pipeline, and CLI | `src/tinysegment/selection.py`, `pipeline.py`, `cli.py` |
 | CLIP text/vision architecture and tokenizer | `vendor/clip/` |
 | YOLO architecture, layers, configs | `vendor/ultralytics/nn/`, `vendor/ultralytics/cfg/models/v8/yolov8-worldv2.yaml` |
 | EfficientViT image encoder and SAM integration | `vendor/efficientvit/models/efficientvit/` |
@@ -92,7 +110,7 @@ TINYSEGMENT_INTEGRATION=1 .venv/bin/python -m unittest discover -s tests -v
 
 Integration tests use real weights, run commands from a temporary directory, reject network and sibling-project access, check stage isolation, and round-trip model state dictionaries. See [validation results](docs/validation.md).
 
-Quantization, model export, training, and a full performance benchmark harness are future work. The EfficientViT copy is an inference subset; upstream training helpers such as `reset_bn` that require its training package are outside this baseline.
+The EfficientViT copy is an inference subset; upstream training helpers such as `reset_bn` that require its training package are outside this baseline.
 
 ## Third-party sources
 
@@ -100,9 +118,16 @@ Quantization, model export, training, and a full performance benchmark harness a
 
 ## SAM experiments and checkpoint protection
 
-The [standard research SAM](research/sam/README.md#standard-research-sam) runs the stage 3 and stage 4 entry blocks with XNNPACK INT8. Use `research.sam.model.load_research_segmenter()` to load it and `tinysegment.load_segmenter()` for original FP32 SAM.
+All three stages default to `baseline`. In the ExecuTorch environment, select the CPU INT8 SAM independently with the following commands.
 
-Research code is separate from inference in [`research/sam/`](research/sam/README.md). Start with:
+```sh
+tinysegment run vendor/ultralytics/assets/bus.jpg person --output outputs/baseline.png
+tinysegment run vendor/ultralytics/assets/bus.jpg person --segmenter-variant int8_stage3_stage4 --output outputs/int8.png
+```
+
+`run` and `video` accept `--clip-variant`, `--detector-variant`, and `--segmenter-variant`. Individual stage commands and `inspect` accept `--variant`. In Python, pass `segmenter_variant="int8_stage3_stage4"` to `tinysegment.pipeline.Pipeline`. For SAM alone, call `tinysegment.selection.load_stage("segmenter", "int8_stage3_stage4")`. The pipeline loads each selected stage once and reuses it across images. The variant README covers building the programs and using an explicit program directory. [INT8 SAM recipe](src/tinysegment/experimental_models/efficientvit_sam/int8_stage3_stage4/README.md)
+
+Benchmark runners, evaluation fixtures, and historical experiments live in `research/sam/`. To inspect, generate, and evaluate an eager checkpoint, run
 
 ```sh
 .venv/bin/python -m research.sam.inspect

@@ -156,7 +156,14 @@ and runtime versions.
 
 ## Standard research SAM
 
-Use `from research.sam.model import load_research_segmenter` and call
+The implementation and standalone build command live in the [variant folder](../../src/tinysegment/experimental_models/efficientvit_sam/int8_stage3_stage4/README.md). From the checkout, compare the two selections on the same input:
+
+```sh
+tinysegment run vendor/ultralytics/assets/bus.jpg person --output outputs/baseline.png
+tinysegment run vendor/ultralytics/assets/bus.jpg person --segmenter-variant int8_stage3_stage4 --output outputs/int8.png
+```
+
+Existing research scripts can still use `from research.sam.model import load_research_segmenter` and call
 `load_research_segmenter()` in the ExecuTorch environment. It loads EfficientViT-SAM
 L0 and replaces the downsampling entry blocks of backbone stages 3 and 4 with
 ExecuTorch programs delegated to XNNPACK on CPU. Each block has a 1×1 expansion

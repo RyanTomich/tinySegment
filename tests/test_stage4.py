@@ -11,7 +11,9 @@ from torch import nn
 
 from research.sam.profile_resident import trace_backbone
 from research.sam.stage4 import samples, saving
+from tinysegment.experimental_models.efficientvit_sam import int8_stage3_stage4 as variant
 from research.sam.model import RuntimeBlock, load_research_segmenter
+from tinysegment.selection import load_stage
 
 
 class Stage4TimingTests(unittest.TestCase):
@@ -39,11 +41,10 @@ class Stage4TimingTests(unittest.TestCase):
 
     def test_research_loader_requires_both_programs(self):
         for missing, present in ((3, 4), (4, 3)):
-            with self.subTest(stage=missing), TemporaryDirectory() as tmp, \
-                    patch('research.sam.model.PROGRAM_DIR', Path(tmp)):
+            with self.subTest(stage=missing), TemporaryDirectory() as tmp:
                 (Path(tmp) / f'stage{present}-int8.pte').touch()
                 with self.assertRaisesRegex(FileNotFoundError, f'stage{missing}-int8'):
-                    load_research_segmenter()
+                    load_research_segmenter(program_dir=tmp)
 
     def test_combined_loader_installs_each_program_in_its_own_entry(self):
         stages = [OpSequential([nn.Identity(), nn.Identity()]) for _ in range(5)]
@@ -56,13 +57,24 @@ class Stage4TimingTests(unittest.TestCase):
             for i, path in paths.items():
                 path.write_bytes(f'stage {i}'.encode())
                 expected[i][0] = programs[path]
-            with patch('research.sam.model.PROGRAM_DIR', Path(tmp).resolve()), \
-                    patch('research.sam.model.load_segmenter', return_value=stage), \
-                    patch('research.sam.model.RuntimeBlock', side_effect=programs.__getitem__):
-                load_research_segmenter()
+            with patch.object(variant, 'load_segmenter', return_value=stage), \
+                    patch.object(variant, 'RuntimeBlock', side_effect=programs.__getitem__):
+                selected = load_stage('segmenter', 'int8_stage3_stage4', program_dir=tmp,
+                                      checkpoint='custom.pth')
+                self.assertIs(selected, stage)
+                variant.load_segmenter.assert_called_once_with(weights_dir=None, checkpoint='custom.pth',
+                                                                device='cpu')
             for i, path in paths.items():
                 self.assertEqual(stage.metadata[f'stage{i}_program']['path'], str(path.resolve()))
         self.assertEqual([list(s.op_list) for s in stages], expected)
+
+    def test_int8_requires_cpu(self):
+        with self.assertRaisesRegex(ValueError, 'CPU'):
+            load_stage('segmenter', 'int8_stage3_stage4', device='mps')
+
+    def test_rejects_variant_for_wrong_stage(self):
+        with self.assertRaisesRegex(ValueError, 'detector'):
+            load_stage('detector', 'int8_stage3_stage4')
 
     def test_profile_times_compiled_stage3_entry(self):
         compiled = RuntimeBlock.__new__(RuntimeBlock)

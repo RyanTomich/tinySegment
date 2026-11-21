@@ -103,7 +103,7 @@ class ResearchSafety(unittest.TestCase):
         from tinysegment.cli import main
         with tempfile.TemporaryDirectory() as directory:
             checkpoint = Path(directory) / 'experiment.bin'; checkpoint.write_bytes(b'candidate')
-            with patch('tinysegment.models.load_text_encoder') as loader:
+            with patch('tinysegment.cli.load_stage') as loader:
                 with self.assertRaises(SystemExit) as caught:
                     main(['encode-text', 'person', '--checkpoint', str(checkpoint), '--output', str(checkpoint)])
                 self.assertEqual(caught.exception.code, 2)

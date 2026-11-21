@@ -2,9 +2,9 @@
 
 ## Project structure
 
-TinySegment runs three independent PyTorch stages. CLIP encodes text, YOLO-World detects boxes, and EfficientViT-SAM L0 segments each box. Keep stage adapters in `src/tinysegment/models.py`, orchestration in `pipeline.py`, and command-line handling in `cli.py`.
+TinySegment runs three independent PyTorch stages. CLIP encodes text, YOLO-World detects boxes, and EfficientViT-SAM L0 segments each box. Keep baseline adapters in `src/tinysegment/baseline_models/` and selectable variants and their build recipes in `src/tinysegment/experimental_models/`. Resolve variants in `selection.py`, run inference in `pipeline.py`, and handle CLI arguments in `cli.py`. Keep `models.py` as compatibility imports.
 
-`vendor/` contains the editable upstream implementations and assets, including the bus image used in smoke tests. Put SAM experiment recipes and benchmarks in `research/sam/`. Keep original checkpoints in `weights/` and generated checkpoints and reports in `runs/sam/`. Both directories are Git-ignored.
+`vendor/` contains the editable upstream implementations and assets, including the bus image used in smoke tests. Put historical SAM experiments, evaluation fixtures, and benchmarks in `research/sam/`. Keep original checkpoints in `weights/` and generated checkpoints and reports in `runs/sam/`. Both directories are Git-ignored.
 
 ## Development commands
 
@@ -12,6 +12,7 @@ Use Python 3.12. From the repository root, create and activate a virtual environ
 
 - On the validated macOS arm64 platform, install dependencies with `python -m pip install -r requirements.lock`, then install the editable checkout with `python -m pip install --no-build-isolation --no-deps -e .`.
 - Run `tinysegment setup-weights` to fetch missing checkpoints and verify their hashes. Exercise the pipeline with `tinysegment run vendor/ultralytics/assets/bus.jpg person --output outputs/overlay.png`.
+- To exercise the CPU INT8 variant in the ExecuTorch environment, run `tinysegment run vendor/ultralytics/assets/bus.jpg person --segmenter-variant int8_stage3_stage4 --output outputs/int8.png`.
 - Build a wheel with `python -m pip wheel --no-deps --no-build-isolation . -w dist`.
 
 ## Coding style

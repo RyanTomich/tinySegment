@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
-from .models import load_text_encoder, load_detector, load_segmenter
+from .selection import load_stage
 
 
 def read_image(path):
@@ -43,18 +43,42 @@ def save_png(image, path):
         image.save(fresh, format='PNG'); fresh.replace(path)
 
 
+class Pipeline:
+    """Resident inference stages for one sequential worker."""
+
+    def __init__(self, *, weights_dir=None, device='cpu', clip_checkpoint=None,
+                 detector_checkpoint=None, segmenter_checkpoint=None, clip_variant='baseline',
+                 detector_variant='baseline', segmenter_variant='baseline', segmenter_program_dir=None):
+        options = dict(weights_dir=weights_dir, device=device)
+        self.text = load_stage('clip', clip_variant, checkpoint=clip_checkpoint, **options)
+        self.detector = load_stage('detector', detector_variant, checkpoint=detector_checkpoint, **options)
+        self.segmenter = load_stage('segmenter', segmenter_variant, checkpoint=segmenter_checkpoint,
+                                    program_dir=segmenter_program_dir, **options)
+        self._last_prompts = None
+        self._embeddings = None
+
+    def process(self, image, prompts, *, legacy_marked_input=False,
+                confidence=.25, iou=.7, image_size=640):
+        prompts = tuple(prompts)
+        if prompts != self._last_prompts:
+            self._embeddings = self.text.encode(prompts)
+            self._last_prompts = prompts
+        detections = self.detector.detect(image, self._embeddings, prompts, confidence, iou, image_size)
+        boxes = detections['boxes']
+        if legacy_marked_input and boxes:
+            image = Image.alpha_composite(image.convert('RGBA'), markers(image, boxes)).convert('RGB')
+        return detections, self.segmenter.segment(image, boxes)
+
+
 def run(image, prompts, *, weights_dir=None, device='cpu', legacy_marked_input=False,
         confidence=.25, iou=.7, image_size=640, clip_checkpoint=None,
-        detector_checkpoint=None, segmenter_checkpoint=None):
-    text = load_text_encoder(weights_dir=weights_dir, checkpoint=clip_checkpoint, device=device)
-    embeddings = text.encode(prompts)
-    detector = load_detector(weights_dir=weights_dir, checkpoint=detector_checkpoint, device=device)
-    detections = detector.detect(image, embeddings, prompts, confidence, iou, image_size)
-    boxes = detections['boxes']
-    if boxes:
-        sam_image = Image.alpha_composite(image.convert('RGBA'), markers(image, boxes)).convert('RGB') if legacy_marked_input else image
-        segmenter = load_segmenter(weights_dir=weights_dir, checkpoint=segmenter_checkpoint, device=device)
-        segmentation = segmenter.segment(sam_image, boxes)
-    else:
-        segmentation = {'masks': np.zeros((0,image.height,image.width), dtype=bool), 'scores': np.zeros(0,dtype=np.float32), 'combined_mask': np.zeros((image.height,image.width),dtype=bool)}
-    return detections, segmentation, render_overlay(image, boxes, segmentation['combined_mask'])
+        detector_checkpoint=None, segmenter_checkpoint=None, clip_variant='baseline',
+        detector_variant='baseline', segmenter_variant='baseline', segmenter_program_dir=None):
+    """One-shot compatibility entry point, including the visualization."""
+    pipeline = Pipeline(weights_dir=weights_dir, device=device, clip_checkpoint=clip_checkpoint,
+                        detector_checkpoint=detector_checkpoint, segmenter_checkpoint=segmenter_checkpoint,
+                        clip_variant=clip_variant, detector_variant=detector_variant,
+                        segmenter_variant=segmenter_variant, segmenter_program_dir=segmenter_program_dir)
+    detections, segmentation = pipeline.process(image, prompts, legacy_marked_input=legacy_marked_input,
+                                                confidence=confidence, iou=iou, image_size=image_size)
+    return detections, segmentation, render_overlay(image, detections['boxes'], segmentation['combined_mask'])
