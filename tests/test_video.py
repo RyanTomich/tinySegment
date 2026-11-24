@@ -1,4 +1,6 @@
+import sys
 import unittest
+from contextlib import nullcontext
 from queue import Queue
 from threading import Event
 from unittest.mock import Mock, patch
@@ -6,10 +8,34 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from tinysegment.stream import LatestInput
-from tinysegment.video import camera_frames, infer_masks, MaskWindow, run_video
+from tinysegment.video import camera_frames, infer_masks, MaskWindow, microphone_prompts, run_video
 
 
 class VideoTests(unittest.TestCase):
+    def test_microphone_updates_prompt_and_closes_idle_reader(self):
+        device = Mock()
+        device.query_devices.return_value = {'default_samplerate': 48000}
+        device.InputStream.return_value = nullcontext(Mock(active=True))
+        heard = Event()
+        received = []
+
+        def transcribe(model, chunks, rate):
+            for chunk in chunks:
+                received.append((chunk.tolist(), rate))
+                yield 'Reachy, coffee mug.'
+                heard.set()
+
+        with patch.dict(sys.modules, sounddevice=device), \
+             patch('tinysegment.baseline_models.moonshine.load_transcriber', return_value=nullcontext(object())), \
+             patch('tinysegment.baseline_models.moonshine.completed_lines', transcribe):
+            with microphone_prompts(initial='person') as prompts:
+                self.assertEqual(prompts.current(), 'person')
+                callback = device.InputStream.call_args.kwargs['callback']
+                callback(np.array([[0.5]], np.float32), 1, None, Mock(input_overflow=False))
+                self.assertTrue(heard.wait(5))
+                self.assertEqual(prompts.current(), 'coffee mug')
+        self.assertEqual(received, [([0.5], 48000)])
+
     def test_playback_continues_during_inference(self):
         captured = Queue()
         def capture():

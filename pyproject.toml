@@ -9,6 +9,9 @@ description = "Editable, independent CLIP, YOLO-World and EfficientViT-SAM infer
 requires-python = ">=3.12"
 dependencies = ["torch", "torchvision", "numpy", "pillow", "opencv-python", "pyyaml", "requests", "matplotlib", "psutil", "polars", "ultralytics-thop", "ftfy", "regex", "tqdm"]
 
+[project.optional-dependencies]
+speech = ["moonshine-voice==0.1.6"]
+
 [project.scripts]
 tinysegment = "tinysegment.cli:main"
 

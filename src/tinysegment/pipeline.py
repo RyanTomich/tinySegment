@@ -1,9 +1,40 @@
 """Image I/O and composition, independent of tensor-level model execution."""
 from pathlib import Path
+import re
 from tempfile import TemporaryDirectory
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 from .selection import load_stage
+from .stream import LatestInput
+
+
+def speech_prompts(transcriber, audio_chunks, *, sample_rate=16000):
+    """Yield up to ten words after each 'Reachy' in finalized speech.
+
+    A wake word spoken alone arms the next utterance. Pass a preloaded
+    transcriber and a continuous source of normalized mono audio chunks.
+    """
+    from .baseline_models.moonshine import completed_lines
+
+    if sample_rate <= 0:
+        raise ValueError('sample_rate must be positive')
+    wake_word = re.compile(r'\bReachy\b', re.IGNORECASE)
+    armed = False
+    for line in completed_lines(transcriber, audio_chunks, sample_rate):
+        for index, phrase in enumerate(wake_word.split(line)):
+            if index:
+                armed = True
+            if armed:
+                words = re.findall(r"\w+(?:[-'’]\w+)*", phrase)
+                if words:
+                    armed = False
+                    yield ' '.join(words[:10])
+
+
+def latest_speech_prompts(transcriber, audio_chunks, *, sample_rate=16000, initial=None):
+    """Listen in the background and retain the last command in current()."""
+    updates = speech_prompts(transcriber, audio_chunks, sample_rate=sample_rate)
+    return LatestInput(updates, initial)
 
 
 def read_image(path):

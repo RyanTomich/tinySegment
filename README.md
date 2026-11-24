@@ -36,13 +36,16 @@ The bundled Ultralytics bus image is a convenient smoke-test input:
 
 Use `--help` on any command. CPU FP32 is the default; `--device mps` or `--device cuda:0` opts into another available backend. Only CPU has been validated. Detection defaults to image size 640, confidence 0.25, and NMS IoU 0.7. Image size must be a multiple of 32.
 
-For live Mac camera inference, run:
+For voice-controlled Mac camera inference, install the speech extra and run:
 
 ```sh
-.venv/bin/tinysegment video person
+.venv/bin/python -m pip install --no-build-isolation -e '.[speech]'
+.venv/bin/tinysegment video
 ```
 
-Allow camera access if macOS prompts you. Type a new prompt in the terminal and press Return to change the target. The window displays the latest camera frame at capture resolution with the most recently completed opaque blue mask. A separate inference worker samples the newest frame and prompt whenever it is ready. During inference, playback continues with the previous mask, which can trail moving objects. The optional initial prompt can be omitted to preview the camera until you enter one. Press `q` or Escape in the window to quit. Use `--camera INDEX` to select another local camera (default `0`).
+The local English Moonshine Tiny Streaming checkpoint belongs in `weights/moonshine/tiny-streaming-en/` and is already present in this checkout. Allow microphone and camera access when macOS prompts you. Say **“Reachy, person”** to segment people, then **“Reachy, water bottle”** to switch targets. Each completed command replaces the active prompt with up to ten words. The target persists through silence and unrelated speech. Supply an optional initial target with `tinysegment video person`.
+
+The window displays the latest camera frame and the most recent mask in blue. The default system microphone listens while inference runs. Press `q` or Escape in the video window to quit. Use `--camera INDEX` to select another local camera (default `0`).
 
 For continuous inference on a fixed image, start a resident worker:
 

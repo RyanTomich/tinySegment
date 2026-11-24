@@ -1,10 +1,66 @@
 """Camera capture, mask presentation, and the live inference loop."""
 from contextlib import contextmanager
+from queue import Empty, Full, Queue
+from threading import Event
 
 import cv2
 from PIL import Image
 
 from .stream import LatestInput
+
+
+@contextmanager
+def microphone_prompts(*, weights_dir=None, initial=None):
+    """Capture the default microphone continuously while video samples prompts."""
+    from .baseline_models.moonshine import load_transcriber
+    from .pipeline import latest_speech_prompts
+
+    try:
+        import sounddevice as sd
+        transcriber = load_transcriber(weights_dir=weights_dir)
+    except ImportError as exc:
+        raise RuntimeError("Install the video speech dependencies with pip install -e '.[speech]'") from exc
+
+    # Buffer short ASR stalls while keeping the PortAudio callback nonblocking.
+    audio = Queue(maxsize=30)
+    stopped = Event()
+    failure = None
+
+    def capture(samples, frames, timing, status):
+        nonlocal failure
+        try:
+            if not status.input_overflow:
+                audio.put_nowait(samples[:, 0].copy())
+                return
+        except Full:
+            pass
+        failure = RuntimeError('Microphone input overflowed during transcription')
+        raise sd.CallbackAbort
+
+    def chunks(mic):
+        while not stopped.is_set():
+            if failure:
+                raise failure
+            try:
+                yield audio.get(timeout=0.1)
+            except Empty:
+                if not mic.active:
+                    raise RuntimeError('Microphone capture stopped unexpectedly')
+
+    with transcriber:
+        try:
+            rate = int(sd.query_devices(kind='input')['default_samplerate'])
+            with sd.InputStream(samplerate=rate, channels=1, dtype='float32',
+                                blocksize=rate // 10, callback=capture) as mic:
+                prompts = latest_speech_prompts(transcriber, chunks(mic), sample_rate=rate, initial=initial)
+                try:
+                    yield prompts
+                finally:
+                    stopped.set()
+                    prompts.close()
+                    prompts.join()
+        except sd.PortAudioError as exc:
+            raise RuntimeError(f'Cannot use the default microphone. Check the input device and microphone permission. {exc}') from exc
 
 
 @contextmanager

@@ -73,18 +73,18 @@ def execute(args):
                              segmenter_variant=args.segmenter_variant, segmenter_program_dir=args.segmenter_program_dir)
         inference_options = dict(confidence=args.confidence, iou=args.iou, image_size=args.image_size)
     if args.command == 'video':
-        from .video import camera_frames, infer_masks, MaskWindow, run_video
+        from .video import camera_frames, infer_masks, MaskWindow, microphone_prompts, run_video
         pipeline = Pipeline(**model_options)
-        with camera_frames(args.camera) as frames:
-            print('Enter a prompt in the terminal. Press q in the video window to quit.', flush=True)
-            prompts = latest_prompts(sys.stdin, initial=(args.prompt or '').strip())
+        with camera_frames(args.camera) as frames, microphone_prompts(
+            weights_dir=args.weights_dir, initial=(args.prompt or '').strip()
+        ) as prompts:
+            print('Say "Reachy" followed by your target. Press q in the video window to quit.', flush=True)
             masks = LatestInput(infer_masks(frames, prompts, pipeline, **inference_options))
             try:
                 with MaskWindow() as output:
                     run_video(frames, masks, output)
             finally:
                 frames.close()
-                prompts.close()
                 masks.close()
                 masks.join()
         return
