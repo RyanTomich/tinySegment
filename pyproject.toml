@@ -15,14 +15,16 @@ speech = ["moonshine-voice==0.1.6"]
 [project.scripts]
 tinysegment = "tinysegment.cli:main"
 
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
-where = ["src", "vendor"]
-include = ["tinysegment*", "efficientvit*", "ultralytics*", "clip*", "segment_anything*"]
+where = [".", "src", "models/clip_vit_b32/baseline/upstream", "models/yolo_world_v2_small/baseline/upstream", "models/efficientvit_sam_l0/baseline/upstream"]
+include = ["models", "models.*", "tinysegment*", "efficientvit*", "ultralytics*", "clip*", "segment_anything*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-tinysegment = ["weights.json"]
-"tinysegment.experimental_models.efficientvit_sam.int8_stage3_stage4" = ["README.md"]
+"*" = ["manifest.json", "calibration.json", "README.md", "upstream/provenance.json", "upstream/source-hashes.json", "upstream/licenses/*/*", "upstream/licenses/*/licenses/*"]
 clip = ["*.gz", "LICENSE"]
 efficientvit = ["LICENSE"]
 segment_anything = ["LICENSE"]

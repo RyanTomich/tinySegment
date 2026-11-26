@@ -4,7 +4,7 @@ Validated on macOS arm64, Python 3.12, CPU FP32 with the versions pinned in `req
 
 ## Real-model comparison
 
-Input: bundled `vendor/ultralytics/assets/bus.jpg` (810 × 1080).
+Input: bundled `tests/fixtures/bus.jpg` (810 × 1080).
 Prompts: `person`, `bus`. Reference: the original locally installed model implementations and checkpoints recorded by the provenance and weight manifests.
 
 | Output | Observed comparison |
@@ -34,8 +34,8 @@ Checkpoint SHA-256 checks passed for all copied weights and for fresh downloads 
 
 CUDA, MPS, training, quantization, exported runtimes, and cross-platform reproducibility have not been validated.
 
-## SAM research workflow validation
+## Historical SAM snapshot validation
 
-The combined suite now passes **16 tests**, including real-weight tests for creating a baseline run, starting another run from its checkpoint, and using a candidate in the complete pipeline. Safety tests cover original-storage rejection, output aliases (symlinks and hard links), unique run allocation, collisions, checkpoint no-clobber behavior, read-only setup, checksum mismatches, failed serialization, incompatible model state, and interrupted experiments.
+Before the SAM evaluation tools were removed, the combined suite passed 16 tests, including real-weight tests for creating a baseline run, starting another run from its checkpoint, and using a candidate in the complete pipeline. Safety tests covered original-storage rejection, output aliases (symlinks and hard links), unique run allocation, collisions, checkpoint no-clobber behavior, read-only setup, checksum mismatches, failed serialization, incompatible model state, and interrupted experiments.
 
-A saved baseline run was also exercised through both `tinysegment segment --checkpoint` and `tinysegment run --segmenter-checkpoint`. Its two fixed-box masks exactly matched the originals (mean mask IoU 1.0), and its 34,792,784 parameters survived save/reload. All three original checkpoint hashes remained unchanged; their files are read-only. The research workflow currently validates eager CPU FP32 L0 state dictionaries, not training quality or quantized runtimes.
+A saved baseline run was also exercised through both `tinysegment segment --checkpoint` and `tinysegment run --segmenter-checkpoint`. Its two fixed-box masks exactly matched the originals (mean mask IoU 1.0), and its 34,792,784 parameters survived save/reload. All three original checkpoint hashes matched their recorded values after the test.

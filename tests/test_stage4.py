@@ -1,43 +1,26 @@
-"""Contracts for the stage 4 experiment's interleaved timing and paired decision."""
-from contextlib import ExitStack
+"""Loader and selection contracts for the INT8 stage 3 and 4 variant."""
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from efficientvit.models.nn.ops import OpSequential
 from torch import nn
 
-from research.sam.profile_resident import trace_backbone
-from research.sam.stage4 import samples, saving
-from tinysegment.experimental_models.efficientvit_sam import int8_stage3_stage4 as variant
-from research.sam.model import RuntimeBlock, load_research_segmenter
-from tinysegment.selection import load_stage
+from models.efficientvit_sam_l0.int8_stage3_stage4 import loader as variant
+from models.efficientvit_sam_l0.int8_stage3_stage4.loader import load_research_segmenter
+from tinysegment.pipeline import load_stage
 
 
-class Stage4TimingTests(unittest.TestCase):
-    def test_rotated_execution_preserves_round_pairing(self):
-        order = []
-        clock = [0]
-
-        def call(name, duration):
-            order.append(name)
-            clock[0] += duration
-
-        calls = {name: (lambda n=name, d=ms: call(n, d * 1_000_000))
-                 for name, ms in [('eager', 10), ('fp32', 5), ('int8', 3)]}
-        with patch('research.sam.stage4.perf_counter_ns', side_effect=lambda: clock[0]):
-            result = samples(calls, 3)
-        self.assertEqual(order[:9], list(calls) * 3)
-        self.assertEqual(order[9:], ['eager', 'fp32', 'int8', 'fp32', 'int8', 'eager',
-                                     'int8', 'eager', 'fp32'])
-        self.assertEqual(result, {'eager': [10] * 3, 'fp32': [5] * 3, 'int8': [3] * 3})
-
-    def test_bootstrap_keeps_pairs_and_direction_of_savings(self):
-        self.assertEqual(saving([90, 31, 205], [85, 26, 200]),
-                         {'median_ms': 5.0, 'ci95_ms': [5.0, 5.0]})
-        self.assertEqual(saving([4, 8, 6], [7, 11, 9])['ci95_ms'], [-3.0, -3.0])
+class StageLoaderTests(unittest.TestCase):
+    def test_default_programs_follow_model_storage(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            expected = root / 'efficientvit_sam_l0/int8_stage3_stage4/artifacts'
+            programs = variant.program_paths(weights_dir=root)
+            self.assertEqual({p.parent for p in programs.values()}, {expected})
+            self.assertFalse(list(root.iterdir()))
 
     def test_research_loader_requires_both_programs(self):
         for missing, present in ((3, 4), (4, 3)):
@@ -75,15 +58,3 @@ class Stage4TimingTests(unittest.TestCase):
     def test_rejects_variant_for_wrong_stage(self):
         with self.assertRaisesRegex(ValueError, 'detector'):
             load_stage('detector', 'int8_stage3_stage4')
-
-    def test_profile_times_compiled_stage3_entry(self):
-        compiled = RuntimeBlock.__new__(RuntimeBlock)
-        nn.Module.__init__(compiled)
-        compiled.method = Mock(execute=lambda inputs: inputs)
-        stages = [OpSequential([nn.Identity()]) for _ in range(5)]
-        stages[3].op_list[0] = compiled
-        times = {}
-        with ExitStack() as stack:
-            trace_backbone(stack, times, SimpleNamespace(stages=stages))
-            self.assertEqual(stages[3](42), 42)
-        self.assertEqual(set(times), {'stage_3', 'stage_3_block_0'})

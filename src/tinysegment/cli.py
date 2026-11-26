@@ -4,8 +4,12 @@ import json
 import sys
 from pathlib import Path
 
-from .selection import VARIANTS, load_stage
-from .stream import LatestInput, latest_prompts
+from PIL import Image, ImageOps
+
+from models.storage import setup_weights, sha256, validate_output_path
+from .pipeline import (
+    VARIANTS, latest_prompts, load_models, load_stage, render_overlay, run, save_png, segment_image,
+)
 
 
 def main(argv=None):
@@ -14,7 +18,9 @@ def main(argv=None):
     for name in ['encode-text', 'detect', 'segment', 'run', 'video', 'inspect', 'setup-weights']:
         p = sub.add_parser(name)
         p.add_argument('--weights-dir', type=Path)
-        if name == 'setup-weights': continue
+        if name == 'setup-weights':
+            p.add_argument('--speech', action='store_true', help='Also download the optional speech model')
+            continue
         p.add_argument('--device', default='cpu')
         if name not in ('run', 'video'): p.add_argument('--checkpoint', type=Path)
         if name in ['detect', 'segment', 'run']: p.add_argument('image', type=Path)
@@ -52,9 +58,9 @@ def main(argv=None):
 
 
 def execute(args):
-    from .weights import setup_weights, sha256, validate_output_path
     if args.command == 'setup-weights':
-        setup_weights(args.weights_dir); return
+        setup_weights(args.weights_dir, speech=args.speech)
+        return
     options = dict(weights_dir=args.weights_dir, device=args.device)
     if args.command not in ('run', 'video'):
         options.update(checkpoint=args.checkpoint, variant=args.variant,
@@ -65,7 +71,6 @@ def execute(args):
         print(json.dumps({**stage.metadata, 'sha256':sha256(stage.checkpoint), 'parameters':sum(p.numel() for p in stage.model.parameters()), 'source':inspect.getfile(type(stage.model))}, indent=2))
         return
     import numpy as np
-    from .pipeline import Pipeline, read_image, render_overlay, save_png
     if args.command in ('run', 'video'):
         model_options = dict(options, clip_checkpoint=args.clip_checkpoint,
                              detector_checkpoint=args.detector_checkpoint, segmenter_checkpoint=args.segmenter_checkpoint,
@@ -73,28 +78,15 @@ def execute(args):
                              segmenter_variant=args.segmenter_variant, segmenter_program_dir=args.segmenter_program_dir)
         inference_options = dict(confidence=args.confidence, iou=args.iou, image_size=args.image_size)
     if args.command == 'video':
-        from .video import camera_frames, infer_masks, MaskWindow, microphone_prompts, run_video
-        pipeline = Pipeline(**model_options)
-        with camera_frames(args.camera) as frames, microphone_prompts(
-            weights_dir=args.weights_dir, initial=(args.prompt or '').strip()
-        ) as prompts:
-            print('Say "Reachy" followed by your target. Press q in the video window to quit.', flush=True)
-            masks = LatestInput(infer_masks(frames, prompts, pipeline, **inference_options))
-            try:
-                with MaskWindow() as output:
-                    run_video(frames, masks, output)
-            finally:
-                frames.close()
-                masks.close()
-                masks.join()
+        run(args.camera, args.prompt, **model_options, **inference_options)
         return
     inputs = [getattr(args, attribute, None) for attribute in
               ['image', 'embeddings', 'boxes', 'checkpoint', 'clip_checkpoint',
                'detector_checkpoint', 'segmenter_checkpoint']]
     if (args.command == 'segment' and args.variant == 'int8_stage3_stage4'
             or args.command == 'run' and args.segmenter_variant == 'int8_stage3_stage4'):
-        from .experimental_models.efficientvit_sam.int8_stage3_stage4 import program_paths
-        inputs.extend(program_paths(args.segmenter_program_dir).values())
+        from models.efficientvit_sam_l0.int8_stage3_stage4.loader import program_paths
+        inputs.extend(program_paths(args.segmenter_program_dir, args.weights_dir).values())
     args.output = validate_output_path(args.output, weights_dir=args.weights_dir, inputs=inputs)
     if args.command == 'encode-text':
         labels = [p.strip() for p in args.prompts]
@@ -102,7 +94,8 @@ def execute(args):
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with args.output.open('wb') as stream: np.savez_compressed(stream, embeddings=features, labels=np.asarray(labels))
     else:
-        image = read_image(args.image)
+        with Image.open(args.image) as source:
+            image = ImageOps.exif_transpose(source).convert('RGB')
         if args.command == 'detect':
             with np.load(args.embeddings, allow_pickle=False) as data:
                 detections = load_stage('detector', **options).detect(image, data['embeddings'], data['labels'].tolist(), args.confidence, args.iou, args.image_size)
@@ -116,14 +109,19 @@ def execute(args):
             args.output.parent.mkdir(parents=True, exist_ok=True)
             with args.output.open('wb') as stream: np.savez_compressed(stream, **result)
         else:
-            from PIL import Image
             if not args.stream and not args.prompt.strip():
                 raise ValueError('Text prompt must not be empty')
-            pipeline = Pipeline(**model_options)
+            text, detector, segmenter = load_models(**model_options)
             prompts = latest_prompts(sys.stdin) if args.stream else [args.prompt.strip()]
+            last_prompt = None
             for prompt in prompts:
-                detections, result = pipeline.process(
-                    image, [prompt], legacy_marked_input=args.legacy_marked_input, **inference_options)
+                labels = (prompt,)
+                if prompt != last_prompt:
+                    embedding = text.encode(labels)
+                    last_prompt = prompt
+                detections, result = segment_image(image, labels, embedding, detector, segmenter,
+                                                   legacy_marked_input=args.legacy_marked_input,
+                                                   **inference_options)
                 mask = result['combined_mask']
                 output = Image.fromarray(mask) if args.stream else render_overlay(image, detections['boxes'], mask)
                 save_png(output, args.output)

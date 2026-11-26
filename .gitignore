@@ -222,8 +222,19 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Restored from the pinned Ultralytics release
+/models/yolo_world_v2_small/baseline/upstream/ultralytics/
+
 # Local model checkpoints and inference artifacts
-/weights/
+/models/**/artifacts/
+/models/**/.build-*/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.pte
+*.ort
+*.onnx
 /outputs/
 /.runtime/
 /build/

@@ -1,0 +1,15 @@
+{
+  "efficientvit": {
+    "commit": "de7d7733cc0329f391b33f1f459271562ec27bd5",
+    "origin": "https://github.com/mit-han-lab/efficientvit",
+    "patches": [
+      "SAM-only package exports; omit training drop.py",
+      "Preserve local optional Triton imports"
+    ]
+  },
+  "segment_anything": {
+    "version": "1.0",
+    "origin": "https://github.com/facebookresearch/segment-anything",
+    "note": "Installed distribution 1.0; no upstream commit metadata was available. Source hashes identify the exact copied files."
+  }
+}

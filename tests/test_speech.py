@@ -1,12 +1,13 @@
 import unittest
-from threading import Event
-from unittest.mock import patch
+from importlib.util import find_spec
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock, call, patch
 
-from tinysegment.pipeline import latest_speech_prompts, speech_prompts
+from tinysegment.pipeline import speech_prompts
 
 
 class SpeechPromptTests(unittest.TestCase):
-    @patch('tinysegment.baseline_models.moonshine.completed_lines')
+    @patch('models.moonshine_tiny_streaming_en.baseline.loader.completed_lines')
     def test_wake_boundaries_repeated_commands_and_word_limit(self, completed):
         completed.return_value = iter([
             'Reachyville and preachy are ordinary words.',
@@ -22,26 +23,32 @@ class SpeechPromptTests(unittest.TestCase):
             'my USB-C cable', 'my red backpack',
             'one two three four five six seven eight nine ten', 'Sam’s glasses',
         ])
-        completed.assert_called_once_with(model, chunks, 16000)
+        completed.assert_called_once_with(model, chunks, 16000, on_text=None)
 
-    @patch('tinysegment.baseline_models.moonshine.completed_lines')
+    @patch('models.moonshine_tiny_streaming_en.baseline.loader.completed_lines')
     def test_previous_prompt_persists_until_command_has_words(self, completed):
-        waiting, resume = Event(), Event()
+        completed.return_value = ['Reachy, water bottle.', 'ordinary conversation', 'Reachy!',
+                                  'green backpack']
+        self.assertEqual(list(speech_prompts(object(), ())), ['water bottle', 'green backpack'])
 
-        def conversation():
-            yield 'Reachy, water bottle.'
-            yield 'ordinary conversation'
-            yield 'Reachy!'
-            waiting.set()
-            resume.wait(5)
-            yield 'green backpack'
+    @unittest.skipUnless(find_spec('moonshine_voice'), 'requires the optional speech runtime')
+    def test_live_revisions_reach_preview_before_the_final_command(self):
+        from moonshine_voice.transcriber import LineCompleted, LineTextChanged
 
-        completed.return_value = conversation()
-        prompts = latest_speech_prompts(object(), iter(()), initial='wallet')
-        try:
-            self.assertTrue(waiting.wait(5))
-            self.assertEqual(prompts.current(), 'water bottle')
-        finally:
-            resume.set()
-            prompts.join()
-        self.assertEqual(prompts.current(), 'green backpack')
+        transcriber = MagicMock()
+        stream = transcriber.create_stream.return_value.__enter__.return_value
+        on_text = Mock()
+
+        def emit(event_type, text):
+            listener = stream.add_listener.call_args.args[0]
+            listener(event_type(line=SimpleNamespace(line_id=7, text=text), stream_handle=1))
+
+        stream.add_audio.side_effect = lambda *_: emit(LineTextChanged, 'Reachy, cab')
+        stream.stop.side_effect = lambda: emit(LineCompleted, 'Reachy, cat.')
+
+        def chunks():
+            yield [0.1]
+            on_text.assert_called_once_with(7, 'Reachy, cab')
+
+        self.assertEqual(list(speech_prompts(transcriber, chunks(), on_text=on_text)), ['cat'])
+        self.assertEqual(on_text.call_args_list, [call(7, 'Reachy, cab'), call(7, 'Reachy, cat.')])

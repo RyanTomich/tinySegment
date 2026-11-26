@@ -1,0 +1,10 @@
+{
+  "ultralytics": {
+    "version": "8.4.213",
+    "origin": "https://github.com/ultralytics/ultralytics",
+    "wheel": {
+      "url": "https://files.pythonhosted.org/packages/95/4c/f50af84fd2a245509f819f6b87766e98c6b0fa4ba4b972bdece607c05fda/ultralytics-8.4.213-py3-none-any.whl",
+      "sha256": "f785d4505a1f4d55f1f46c6ff27d8ff28154c857c964323c5bf610da7f389a97"
+    }
+  }
+}

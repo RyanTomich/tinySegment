@@ -1,0 +1,11 @@
+{
+  "clip/LICENSE": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0",
+  "clip/__init__.py": "d2cca6208f9414c645149c9372c7475f38cbb3e68d712b5e0a4fcd7ca8712575",
+  "clip/bpe_simple_vocab_16e6.txt.gz": "924691ac288e54409236115652ad4aa250f48203de50a9e4722a6ecd48d6804a",
+  "clip/clip.py": "0bdc735dd0beb1525f5c10aca6a7b4ce42db2c5d97ee20dd37c84bdeeaade98c",
+  "clip/model.py": "3cf2b52cbb546afac2fceee38a905ebff54a8bee996378f993475ca37b9ff538",
+  "clip/simple_tokenizer.py": "e6fb15f44623f0087bc9d0bc695b383c61966c7dda4d5cc09e5e9880c1406bab",
+  "licenses/clip/METADATA": "2448716f0aa968c4aff0d81abd1af7da2bf378b3167ea26f064405ad4642bd1a",
+  "licenses/clip/direct_url.json": "1e4e03d2e21ce2c1bf0527aa047da120afa758caed02cce5c3f0b39c82ddd5f1",
+  "licenses/clip/licenses/LICENSE": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+}
